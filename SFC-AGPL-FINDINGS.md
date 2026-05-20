@@ -63,18 +63,52 @@ inherited.
 
 ### Violation 2 — cease-and-desist against an AGPL-permitted fork
 
-Bambu Lab issued cease-and-desist demands against **Paweł Jarczak**,
-who maintained an OrcaSlicer fork that allowed users to operate
-Bambu printers without the proprietary libraries. SFC reads this as
-a direct violation of AGPLv3 §10¶3:
+Bambu Lab issued cease-and-desist demands against **Paweł Jarczak**.
+SFC describes what he built:
+
+> *"A software developer and Bambu Lab user (Paweł Jarczak) released
+> another mechanism to integrate with Bambu Studio's server side
+> components that did not require replacing or modifying the
+> dynamically linked libraries. Instead, Paweł made changes to a
+> different AGPLv3'd slicer (Orca Slicer) by merely examining the
+> (incomplete) source code for Bambu Studio. Those Orca Slicer
+> modifications allowed users to replace Bambu Studio and instead
+> combine Orca Slicer via intimate data communication with Bambu
+> Studio's currently-source-unavailable parts that run on Bambu
+> Lab's servers."*
+
+Critically, Paweł's fork **did not use `libbambu_networking.so` at
+all**. Instead, he reverse-engineered the wire protocol that
+BambuNetwork uses to talk to Bambu Lab's cloud servers, and
+reimplemented that conversation directly inside OrcaSlicer — a
+clean-room reimplementation of the *protocol*, not a redistribution
+of any proprietary binary.
+
+Bambu's response:
+
+> *"Bambu demanded that Paweł remove the fork of OrcaSlicer with
+> these changes from Github."*
+
+Paweł complied (under protest) and the original repository at
+`github.com/jarczakpawel/OrcaSlicer-bambulab` is no longer
+available. SFC reads the C&D as a direct violation of AGPLv3 §10¶3:
 
 > *"You may not impose any further restrictions on the exercise of
 > the rights granted or affirmed under this License."*
 
-Forking and modifying AGPL software (including stripping out
-proprietary dependencies) is exactly what the license permits;
-attempting to use trademark or contract claims to suppress that
-exercise is the conduct §10¶3 prohibits.
+The §10¶3 argument is sharp here precisely *because* Paweł's work
+was a clean-room reimplementation of the network protocol. He was
+modifying AGPL-licensed Orca Slicer (which inherits from AGPL Bambu
+Studio, which inherits from AGPL PrusaSlicer / Slic3r) — exactly
+what AGPL §2 grants him the right to do. Bambu used trademark
+and/or ToS claims to suppress that AGPL-permitted modification,
+which is the conduct §10¶3 prohibits.
+
+> ⚠️ A separate repository named `OrcaSlicer-bambulab` exists on
+> GitHub re-uploaded by a third party ("Jake") after Paweł's
+> removal. That repository **restores BambuNetwork support** —
+> i.e., it is the opposite of what Paweł built. Do not confuse the
+> two: the name collision is misleading.
 
 ## What SFC is doing about it
 
@@ -87,8 +121,12 @@ The response is operational, not just rhetorical:
   > these libraries for the purpose of creating our own Source Code
   > that can function as a drop-in replacement in Bambu Studio."*
 
-- **Maintaining an OrcaSlicer fork** that operates Bambu printers
-  without the proprietary components.
+- **Continuing Paweł's OrcaSlicer fork**, hosted on SFC's own
+  forge under the `baltobu` namespace:
+  <https://f.sfconservancy.org/baltobu/orca-slicer-for-bambu>.
+  The article describes it as a continuation that "will build on
+  Paweł's work" — i.e., the protocol-reimplementation approach, not
+  a re-integration of `libbambu_networking.so`.
 - Building a clean-slate replacement slicer (codename **"viscose"**)
   integrating the reverse-engineering work.
 - Standing up a permanent **committee for 3D-printer software freedom**
