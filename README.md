@@ -35,6 +35,70 @@ inconvenient when:
 - you want to inspect or audit the binaries Bambu's updater would
   fetch.
 
+## What each library does
+
+A brief tour of what these binaries actually do inside Bambu Studio.
+File paths below refer to the upstream [BambuStudio][bambu-studio]
+source tree.
+
+### `libbambu_networking` — control plane (cloud + LAN)
+
+Loaded at startup by `NetworkAgent` (`src/slic3r/Utils/NetworkAgent.cpp`,
+`initialize_network_module` → `dlopen`). It exposes ~80 C functions
+prefixed `bambu_network_*` that the slicer wraps into a C++ `NetworkAgent`
+object. Functionality includes:
+
+- **Cloud account** — login / OAuth against Bambu Lab.
+- **MQTT messaging** — long-lived pub/sub channel to Bambu's broker for
+  telemetry and remote commands.
+- **LAN discovery** — SSDP scan for printers on the local network.
+- **Direct LAN connection** — talk to a printer over its local socket.
+- **TLS / device cert handling**.
+
+Without this library, Bambu Studio is effectively a local-only G-code
+generator: no print upload, no printer status, no LAN or cloud features.
+
+### `libBambuSource` — camera-stream media source plugin
+
+Loaded by `wxMediaCtrl2` / `MediaPlayCtrl` and registered with the host
+platform's media framework (GStreamer on Linux, Media Foundation on
+Windows, AVFoundation on macOS). It claims the proprietary `bambu:///`
+URL scheme, e.g.
+
+```
+bambu:///rtsps___<user>:<pass>@<lan-ip>/streaming/live/1?proto=rtsps
+```
+
+When the "live view" panel asks wxMediaCtrl to play one of those URLs,
+the OS hands it to `libBambuSource`, which negotiates the printer's
+RTSPS session, handles auth/decryption, and produces decoded video
+frames for the UI.
+
+### `liblive555` — RTSP/RTP/RTCP client
+
+A pure dependency of `libBambuSource`. [LIVE555][live555] is a
+well-known open-source C++ streaming-media library implementing the
+protocol-level work: RTSP session setup, RTP packet handling, RTCP
+feedback. `libBambuSource` sits on top of it.
+
+### `libagora_rtc_sdk` + `libagora-fdkaac` — cloud-relayed camera
+
+Runtime dependencies of `libbambu_networking` (not of `libBambuSource`).
+[Agora][agora] is a commercial WebRTC-style real-time-comms SDK. This
+path is used when the camera feed cannot go directly over LAN RTSP —
+e.g. viewing the printer's camera from outside your network — and has
+to be relayed through Bambu's cloud. The `fdkaac` shim is the
+Fraunhofer AAC codec used for the audio side of that relay.
+
+### Summary
+
+| Library | Loaded by | Role | Talks to |
+|---|---|---|---|
+| `libbambu_networking` | `NetworkAgent` (`dlopen`) | Cloud + LAN control plane (auth, MQTT, discovery, commands) | `mqtt.bambulab.com`, the printer over LAN |
+| `libBambuSource` | `wxMediaCtrl2` (registered with OS media framework) | Source plugin for the `bambu:///` URL scheme | The printer's RTSPS camera endpoint |
+| `liblive555` | linked into `libBambuSource` | RTSP/RTP protocol client | Same — protocol details for camera stream |
+| `libagora_rtc_sdk` + `fdkaac` | `dlopen`'d by `libbambu_networking` when needed | Cloud-relayed camera (off-LAN viewing) | Agora's WebRTC relay servers |
+
 ## Requirements
 
 - `bash` 4+
@@ -146,3 +210,5 @@ Shenzhen Bambu Lab Technology Co., Ltd. This project is independent and
 is not produced, endorsed, sponsored, or supported by Bambu Lab.
 
 [bambu-studio]: https://github.com/bambulab/BambuStudio
+[live555]: http://www.live555.com/
+[agora]: https://www.agora.io/
