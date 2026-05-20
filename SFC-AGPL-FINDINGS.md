@@ -40,7 +40,7 @@ runtime:
 
 …plus Agora SDK runtime dependencies. The dynamic-load pattern is in
 `src/slic3r/Utils/NetworkAgent.cpp`: `dlopen` (line ~257) followed by
-~80 `dlsym` lookups (lines 284–308+) binding `bambu_network_*`
+108 `dlsym` lookups (lines 284–308+) binding `bambu_network_*`
 symbols that the slicer then calls synchronously inside the AGPL
 process.
 

@@ -44,7 +44,7 @@ source tree.
 ### `libbambu_networking` — control plane (cloud + LAN)
 
 Loaded at startup by `NetworkAgent` (`src/slic3r/Utils/NetworkAgent.cpp`,
-`initialize_network_module` → `dlopen`). It exposes ~80 C functions
+`initialize_network_module` → `dlopen`). It exposes 108 C functions
 prefixed `bambu_network_*` that the slicer wraps into a C++ `NetworkAgent`
 object. Functionality includes:
 
