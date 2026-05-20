@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+# Copyright (C) 2026 Ellery D'Souza
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public
+# License along with this program.  If not, see
+# <https://www.gnu.org/licenses/>.
+# ---
+# baltobu-dl-network-plugins — download Bambu Studio's network plugin
+# shared libraries (libbambu_networking, libBambuSource, liblive555 and
+# the Agora runtime deps) for one or more target platforms.
+#
+# This tool talks to Bambu Lab's public resource API the same way the
+# slicer itself does (see PresetUpdater::priv::sync_plugins in the
+# BambuStudio source). It is not affiliated with or endorsed by
+# Bambu Lab.
+#
+# Usage:
+#   baltobu-dl-network-plugins --platform <id> [--platform <id> ...]
+#                              [--version M.m.p.bb] [--dest <dir>]
+#                              [--country US|CN]
+#
+# --platform is required. Valid IDs: linux, macos, windows, windows-arm, all
+# (the "all" shorthand expands to every published platform).
+#
+# Defaults for the optional flags:
+#   --version   $DEFAULT_VERSION below (override as new releases ship).
+#   --dest      single platform → $XDG_CONFIG_HOME/BambuStudio/plugins
+#               multiple        → ./bambu_plugins/  (split per OS subdir)
+#   --country   US
+#
+# Examples:
+#   baltobu-dl-network-plugins --platform linux      # → ~/.config/BambuStudio/plugins
+#   baltobu-dl-network-plugins --platform all        # everything → ./bambu_plugins/<os>/
+#   baltobu-dl-network-plugins --platform macos --platform windows --dest ./out
+
+set -euo pipefail
+
+# Version sent to the server's "are you up to date?" check. The server
+# returns the latest published plugin matching this major.minor, so any
+# version with the right MM.mm prefix yields the newest patch. Bump when
+# Bambu Studio's minor version moves.
+DEFAULT_VERSION="02.07.00.00"
+
+country="US"
+version=""
+dest=""
+declare -a platforms=()
+
+print_help() {
+    # Print the doc-comment block that follows the "# ---" marker,
+    # stopping at the first non-comment line. The license header above
+    # the marker is intentionally skipped.
+    awk '
+        !started && /^# ---$/ { started=1; next }
+        !started               { next }
+        /^#/                   { sub(/^# ?/,""); print; next }
+                               { exit }
+    ' "$0"
+}
+
+if [[ $# -eq 0 ]]; then
+    print_help >&2
+    exit 2
+fi
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --version)  version="$2"; shift 2 ;;
+        --dest)     dest="$2"; shift 2 ;;
+        --country)  country="$2"; shift 2 ;;
+        --platform) platforms+=("$2"); shift 2 ;;
+        -h|--help)
+            print_help
+            exit 0 ;;
+        *) echo "Unknown argument: $1" >&2; exit 2 ;;
+    esac
+done
+
+if [[ -z "$version" ]]; then
+    version="$DEFAULT_VERSION"
+fi
+
+if [[ ${#platforms[@]} -eq 0 ]]; then
+    echo "Error: --platform is required (use --help to see options)." >&2
+    exit 2
+fi
+declare -a resolved=()
+for p in "${platforms[@]}"; do
+    case "$p" in
+        all)         resolved+=(linux macos windows windows-arm) ;;
+        linux|macos|windows|windows-arm) resolved+=("$p") ;;
+        *) echo "Unknown --platform $p" >&2; exit 2 ;;
+    esac
+done
+declare -a platforms_final=()
+declare -A seen=()
+for p in "${resolved[@]}"; do
+    if [[ -z "${seen[$p]:-}" ]]; then
+        platforms_final+=("$p")
+        seen[$p]=1
+    fi
+done
+
+case "$country" in
+    US) api_host="api.bambulab.com" ;;
+    CN) api_host="api.bambulab.cn" ;;
+    *)  echo "Unsupported --country $country (use US or CN)." >&2; exit 2 ;;
+esac
+
+if [[ -z "$dest" ]]; then
+    if [[ ${#platforms_final[@]} -eq 1 ]]; then
+        dest="${XDG_CONFIG_HOME:-$HOME/.config}/BambuStudio/plugins"
+    else
+        dest="./bambu_plugins"
+    fi
+fi
+
+api_url="https://${api_host}/v1/iot-service/api/slicer/resource?slicer/plugins/cloud=${version}"
+
+os_header_for() {
+    case "$1" in
+        linux)       echo linux ;;
+        macos)       echo macos ;;
+        windows)     echo windows ;;
+        windows-arm) echo windows_arm ;;
+    esac
+}
+
+tmpdir=$(mktemp -d)
+trap 'rm -rf "$tmpdir"' EXIT
+
+for platform in "${platforms_final[@]}"; do
+    os_type=$(os_header_for "$platform")
+    echo
+    echo "=== $platform ($os_type) ==="
+    echo "Querying $api_url"
+
+    response=$(curl -fsSL \
+        -H "X-BBL-Client-Type: slicer" \
+        -H "X-BBL-Client-Name: BambuStudio" \
+        -H "X-BBL-OS-Type: $os_type" \
+        "$api_url")
+
+    zip_url=$(printf '%s' "$response" \
+        | grep -oP '"type":"slicer/plugins/cloud"[^}]*"url":"\K[^"]+' \
+        | head -n1)
+
+    if [[ -z "$zip_url" ]]; then
+        echo "Warning: no plugin published for $platform at version $version; skipping." >&2
+        echo "Raw response: $response" >&2
+        continue
+    fi
+
+    echo "Plugin bundle: $zip_url"
+
+    if [[ ${#platforms_final[@]} -eq 1 ]]; then
+        out_dir="$dest"
+    else
+        out_dir="$dest/$platform"
+    fi
+    mkdir -p "$out_dir"
+
+    zip_path="$tmpdir/${platform}.zip"
+    echo "Downloading to $zip_path"
+    curl -fSL -o "$zip_path" "$zip_url"
+
+    echo "Extracting to $out_dir"
+    unzip -o "$zip_path" -d "$out_dir"
+
+    echo
+    echo "Installed plugins ($platform):"
+    ls -lh "$out_dir"
+done

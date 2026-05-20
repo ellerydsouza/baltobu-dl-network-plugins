@@ -1,0 +1,6 @@
+# Default download directory when running the script in-tree.
+/bambu_plugins/
+
+# Editor / OS junk
+*.swp
+.DS_Store
