@@ -203,6 +203,13 @@ The shared libraries this tool *downloads* are proprietary works of
 Bambu Lab and its upstream vendors and are subject to their own
 license terms — this project does not grant you any rights to them.
 
+> ⚠️ **Note on AGPL compliance:** As of 2026-05-18, the Software
+> Freedom Conservancy has publicly alleged that distributing Bambu
+> Studio bundled with these proprietary plugins violates the AGPLv3
+> on the upstream PrusaSlicer/Slic3r code Bambu Studio inherits.
+> See [`SFC-AGPL-FINDINGS.md`](./SFC-AGPL-FINDINGS.md) for a summary
+> of the position and what it implies for users of this fetcher.
+
 ## Trademarks
 
 "Bambu Lab", "Bambu Studio", and related marks are trademarks of
